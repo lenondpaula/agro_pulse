@@ -1,0 +1,53 @@
+# GitHub Actions Workflow - Keep Alive
+# Mantém a aplicação Streamlit Cloud ativa, evitando sleep mode
+# Executa a cada 12 horas para fazer ping na aplicação
+
+name: 🟢 Keep Alive - AgroPulse
+
+on:
+  # Executa automaticamente a cada 12 horas
+  schedule:
+    - cron: '0 */12 * * *'  # A cada 12 horas (00:00 e 12:00 UTC)
+  
+  # Permite execução manual via GitHub Actions
+  workflow_dispatch:
+
+jobs:
+  keep-alive:
+    name: 📡 Ping AgroPulse
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 🔔 Ping aplicação Streamlit
+        run: |
+          echo "🚀 Fazendo ping em agropulse.streamlit.app..."
+          
+          # Faz requisição HTTP para manter a aplicação ativa
+          response=$(curl -s -o /dev/null -w "%{http_code}" https://agropulse.streamlit.app)
+          
+          echo "📊 Status HTTP: $response"
+          
+          if [ "$response" -eq 200 ] || [ "$response" -eq 302 ]; then
+            echo "✅ Aplicação está ativa e respondendo!"
+          else
+            echo "⚠️ Aplicação retornou status $response - pode estar inicializando"
+          fi
+          
+          # Aguarda alguns segundos para garantir que a app carregue
+          sleep 10
+          
+          # Segunda verificação
+          response2=$(curl -s -o /dev/null -w "%{http_code}" https://agropulse.streamlit.app)
+          echo "📊 Segunda verificação - Status HTTP: $response2"
+          
+          if [ "$response2" -eq 200 ] || [ "$response2" -eq 302 ]; then
+            echo "✅ AgroPulse Media Watch está online!"
+          fi
+
+      - name: 📝 Log de execução
+        run: |
+          echo "================================================"
+          echo "🕐 Horário UTC: $(date -u)"
+          echo "🌎 Aplicação: https://agropulse.streamlit.app"
+          echo "📡 Próximo ping em 12 horas"
+          echo "================================================"

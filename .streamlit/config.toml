@@ -1,0 +1,21 @@
+# AgroPulse Media Watch - Configuração Streamlit
+# Tema: High Contrast Dark Mode para leitura rápida
+
+[theme]
+primaryColor = "#00FF88"
+backgroundColor = "#0E1117"
+secondaryBackgroundColor = "#1A1F2E"
+textColor = "#FAFAFA"
+font = "sans serif"
+
+[server]
+headless = true
+port = 8501
+enableCORS = true
+enableXsrfProtection = false
+
+[browser]
+gatherUsageStats = false
+
+[runner]
+magicEnabled = true
