@@ -384,15 +384,17 @@ st.markdown(f"""
 # CARREGA DADOS
 # ============================================
 @st.cache_data(ttl=300)  # Cache de 5 minutos
-def load_data():
-    """Carrega todos os dados das fontes."""
-    web_news = get_web_news()
-    radio_data = simulate_radio_listening()
+def load_data(lang='pt-br'):
+    """Carrega todos os dados das fontes baseado no idioma selecionado."""
+    web_news = get_web_news(lang)
+    radio_data = simulate_radio_listening(lang)
     social_buzz = simulate_social_buzz()
     sentiment = get_sentiment_summary(radio_data)
     return web_news, radio_data, social_buzz, sentiment
 
-web_news_df, radio_df, social_df, sentiment_summary = load_data()
+# Carrega dados com o idioma selecionado
+current_lang = st.session_state.language
+web_news_df, radio_df, social_df, sentiment_summary = load_data(current_lang)
 
 # ============================================
 # TICKER SUPERIOR - ÚLTIMA MENÇÃO EM RÁDIO

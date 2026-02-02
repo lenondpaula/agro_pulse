@@ -12,16 +12,23 @@ import random
 fake = Faker('pt_BR')
 
 
-def get_web_news():
+def get_web_news(lang='pt-br'):
     """
     Busca notícias reais usando GoogleNews para termos relacionados ao agronegócio.
     Retorna DataFrame com: Hora, Veículo, Título, Link
+    
+    Args:
+        lang: Idioma para fallback simulado ('pt-br' ou 'es-uy')
     """
     try:
         from GoogleNews import GoogleNews
         
-        # Configura GoogleNews para português
-        googlenews = GoogleNews(lang='pt', region='BR')
+        # Configura GoogleNews baseado no idioma
+        if lang == 'es-uy':
+            googlenews = GoogleNews(lang='es', region='UY')
+        else:
+            googlenews = GoogleNews(lang='pt', region='BR')
+        
         googlenews.set_period('1d')  # Últimas 24 horas
         
         all_news = []
@@ -35,7 +42,7 @@ def get_web_news():
             for item in results[:5]:  # Limita a 5 por termo
                 # Processa o tempo de publicação (corrige "á" para "Há")
                 raw_date = item.get('date', '')
-                formatted_date = _format_news_date(raw_date)
+                formatted_date = _format_news_date(raw_date, lang)
                 
                 # Processa o link - GoogleNews retorna links que precisam de tratamento
                 raw_link = item.get('link', '')
@@ -50,34 +57,44 @@ def get_web_news():
         
         if not all_news:
             # Fallback com dados simulados se não houver resultados
-            return _simulate_web_news()
+            return _simulate_web_news(lang)
             
         return pd.DataFrame(all_news)
     
     except Exception as e:
         print(f"Erro ao buscar notícias: {e}. Usando dados simulados.")
-        return _simulate_web_news()
+        return _simulate_web_news(lang)
 
 
-def _format_news_date(raw_date):
+def _format_news_date(raw_date, lang='pt-br'):
     """
     Formata a data/hora de publicação retornada pelo GoogleNews.
-    Corrige problemas como 'á X minutos' para 'Há X minutos'.
+    Corrige problemas como 'á X minutos' para 'Há X minutos' ou 'Hace X minutos'.
+    
+    Args:
+        raw_date: Data bruta do GoogleNews
+        lang: Idioma ('pt-br' ou 'es-uy')
     """
     if not raw_date:
         return datetime.now().strftime('%H:%M')
     
-    # Corrige o problema comum do GoogleNews: "á" em vez de "Há"
     formatted = str(raw_date)
     
-    # Substitui padrões incorretos
-    if formatted.startswith('á '):
-        formatted = 'Há ' + formatted[2:]
-    elif formatted.startswith('a '):
-        formatted = 'Há ' + formatted[2:]
-    
-    # Garante que "Há" está com acento correto
-    formatted = formatted.replace('Ha ', 'Há ').replace('ha ', 'Há ')
+    if lang == 'es-uy':
+        # Para espanhol: converter para "Hace X minutos/horas"
+        formatted = formatted.replace('á ', 'Hace ').replace('a ', 'Hace ')
+        formatted = formatted.replace('Há ', 'Hace ').replace('Ha ', 'Hace ')
+        formatted = formatted.replace('minutos', 'min').replace('horas', 'h')
+        formatted = formatted.replace('hora', 'h').replace('minuto', 'min')
+    else:
+        # Para português: Corrige o problema comum do GoogleNews: "á" em vez de "Há"
+        if formatted.startswith('á '):
+            formatted = 'Há ' + formatted[2:]
+        elif formatted.startswith('a '):
+            formatted = 'Há ' + formatted[2:]
+        
+        # Garante que "Há" está com acento correto
+        formatted = formatted.replace('Ha ', 'Há ').replace('ha ', 'Há ')
     
     return formatted
 
@@ -85,10 +102,19 @@ def _format_news_date(raw_date):
 def _format_news_link(raw_link):
     """
     Formata o link retornado pelo GoogleNews.
-    O GoogleNews pode retornar links relativos ou com redirecionamento.
+    Remove parâmetros de tracking do Google (&ved, &usg, etc.)
     """
     if not raw_link or raw_link == '#':
         return '#'
+    
+    # Remove parâmetros de tracking do Google
+    # O GoogleNews adiciona &ved=... e &usg=... aos links
+    if '&ved=' in raw_link:
+        raw_link = raw_link.split('&ved=')[0]
+    if '&usg=' in raw_link:
+        raw_link = raw_link.split('&usg=')[0]
+    if '?ved=' in raw_link:
+        raw_link = raw_link.split('?ved=')[0]
     
     # Se já é um link completo, retorna
     if raw_link.startswith('http://') or raw_link.startswith('https://'):
@@ -105,125 +131,314 @@ def _format_news_link(raw_link):
     return '#'
 
 
-def _simulate_web_news():
+def _simulate_web_news(lang='pt-br'):
     """
     Fallback: gera notícias simuladas quando GoogleNews não está disponível.
     Divididas em: Agro en Punta (foco principal) e Outros Temas.
+    Suporta internacionalização PT-BR e ES-UY.
     """
     
     # === NOTÍCIAS SOBRE AGRO EN PUNTA (FOCO PRINCIPAL) ===
-    agro_en_punta_news = [
-        {
-            'Título': 'Agro en Punta 2026 reúne 15 mil produtores em Punta del Este',
-            'Veículo': 'El País Uruguay',
-            'Link': 'https://www.elpais.com.uy/agro',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Ministros do Mercosul assinam acordos históricos no Agro en Punta',
-            'Veículo': 'El Observador',
-            'Link': 'https://www.elobservador.com.uy/agro',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Startups agtech apresentam inovações no Agro en Punta 2026',
-            'Veículo': 'La Nación Campo',
-            'Link': 'https://www.lanacion.com.ar/economia/campo',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Brasil e Uruguai firmam parceria para rastreabilidade bovina no evento',
-            'Veículo': 'Canal Rural',
-            'Link': 'https://www.canalrural.com.br',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Agro en Punta destaca sustentabilidade como futuro do agronegócio',
-            'Veículo': 'Agrolink',
-            'Link': 'https://www.agrolink.com.br',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Delegação brasileira de 500 produtores participa do Agro en Punta',
-            'Veículo': 'Notícias Agrícolas',
-            'Link': 'https://www.noticiasagricolas.com.br',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Evento em Punta del Este movimenta US$ 2 bilhões em negócios',
-            'Veículo': 'Valor Econômico',
-            'Link': 'https://valor.globo.com/agronegocios',
-            'Categoria': 'Agro en Punta'
-        },
-        {
-            'Título': 'Tecnologia de precisão é destaque no pavilhão do Agro en Punta',
-            'Veículo': 'El País Uruguay',
-            'Link': 'https://www.elpais.com.uy/agro',
-            'Categoria': 'Agro en Punta'
-        },
-    ]
+    # Inclui links oficiais do evento, redes sociais e cobertura da imprensa
+    agro_en_punta_news = {
+        'pt-br': [
+            # Links oficiais e redes sociais do evento
+            {
+                'Título': '🌐 Site Oficial: Agro en Punta 2026 - Programação Completa',
+                'Veículo': 'Agro en Punta (Oficial)',
+                'Link': 'https://www.agroenpunta.com',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '📷 Instagram @agroenpunta - Cobertura ao vivo do evento',
+                'Veículo': 'Instagram Oficial',
+                'Link': 'https://www.instagram.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '🐦 X/Twitter @agroenpunta - Atualizações em tempo real',
+                'Veículo': 'X (Twitter) Oficial',
+                'Link': 'https://twitter.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '📘 Facebook Agro en Punta - Fotos e vídeos exclusivos',
+                'Veículo': 'Facebook Oficial',
+                'Link': 'https://www.facebook.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '🎬 YouTube Agro en Punta - Palestras e painéis ao vivo',
+                'Veículo': 'YouTube Oficial',
+                'Link': 'https://www.youtube.com/@agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            # Cobertura da imprensa
+            {
+                'Título': 'Agro en Punta 2026 reúne 15 mil produtores em Punta del Este',
+                'Veículo': 'El País Uruguay',
+                'Link': 'https://www.elpais.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Ministros do Mercosul assinam acordos históricos no Agro en Punta',
+                'Veículo': 'El Observador',
+                'Link': 'https://www.elobservador.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'O boom de Punta del Este: evento agro transforma a região',
+                'Veículo': 'Forbes Brasil',
+                'Link': 'https://forbes.com.br/forbeslife/2025/11/o-boom-de-punta-del-este-descubra-a-cena-artistica-e-cultural-do-litoral-uruguaio/',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Startups agtech apresentam inovações no Agro en Punta 2026',
+                'Veículo': 'La Nación Campo',
+                'Link': 'https://www.lanacion.com.ar/economia/campo',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Brasil e Uruguai firmam parceria para rastreabilidade bovina',
+                'Veículo': 'Canal Rural',
+                'Link': 'https://www.canalrural.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Agro en Punta destaca sustentabilidade como futuro do agronegócio',
+                'Veículo': 'Agrolink',
+                'Link': 'https://www.agrolink.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Delegação brasileira de 500 produtores participa do Agro en Punta',
+                'Veículo': 'Notícias Agrícolas',
+                'Link': 'https://www.noticiasagricolas.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Evento em Punta del Este movimenta US$ 2 bilhões em negócios',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Tecnologia de precisão é destaque no pavilhão do Agro en Punta',
+                'Veículo': 'El País Uruguay',
+                'Link': 'https://www.elpais.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Pecuária de elite: leilões batem recordes no Agro en Punta',
+                'Veículo': 'Revista Globo Rural',
+                'Link': 'https://globorural.globo.com',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Uruguai se consolida como hub do agronegócio regional',
+                'Veículo': 'Infobae',
+                'Link': 'https://www.infobae.com/america/agro/',
+                'Categoria': 'Agro en Punta'
+            },
+        ],
+        'es-uy': [
+            # Links oficiales y redes sociales del evento
+            {
+                'Título': '🌐 Sitio Oficial: Agro en Punta 2026 - Programación Completa',
+                'Veículo': 'Agro en Punta (Oficial)',
+                'Link': 'https://www.agroenpunta.com',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '📷 Instagram @agroenpunta - Cobertura en vivo del evento',
+                'Veículo': 'Instagram Oficial',
+                'Link': 'https://www.instagram.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '🐦 X/Twitter @agroenpunta - Actualizaciones en tiempo real',
+                'Veículo': 'X (Twitter) Oficial',
+                'Link': 'https://twitter.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '📘 Facebook Agro en Punta - Fotos y videos exclusivos',
+                'Veículo': 'Facebook Oficial',
+                'Link': 'https://www.facebook.com/agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': '🎬 YouTube Agro en Punta - Conferencias y paneles en vivo',
+                'Veículo': 'YouTube Oficial',
+                'Link': 'https://www.youtube.com/@agroenpunta',
+                'Categoria': 'Agro en Punta'
+            },
+            # Cobertura de prensa
+            {
+                'Título': 'Agro en Punta 2026 reúne 15 mil productores en Punta del Este',
+                'Veículo': 'El País Uruguay',
+                'Link': 'https://www.elpais.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Ministros del Mercosur firman acuerdos históricos en Agro en Punta',
+                'Veículo': 'El Observador',
+                'Link': 'https://www.elobservador.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'El boom de Punta del Este: evento agro transforma la región',
+                'Veículo': 'Forbes',
+                'Link': 'https://forbes.com.br/forbeslife/2025/11/o-boom-de-punta-del-este-descubra-a-cena-artistica-e-cultural-do-litoral-uruguaio/',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Startups agtech presentan innovaciones en Agro en Punta 2026',
+                'Veículo': 'La Nación Campo',
+                'Link': 'https://www.lanacion.com.ar/economia/campo',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Brasil y Uruguay firman alianza para trazabilidad bovina',
+                'Veículo': 'Canal Rural',
+                'Link': 'https://www.canalrural.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Agro en Punta destaca sostenibilidad como futuro del agronegocio',
+                'Veículo': 'Agrolink',
+                'Link': 'https://www.agrolink.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Delegación brasileña de 500 productores participa en Agro en Punta',
+                'Veículo': 'Noticias Agrícolas',
+                'Link': 'https://www.noticiasagricolas.com.br',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Evento en Punta del Este mueve US$ 2 mil millones en negocios',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Tecnología de precisión es destaque en el pabellón del Agro en Punta',
+                'Veículo': 'El País Uruguay',
+                'Link': 'https://www.elpais.com.uy/agro',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Ganadería de elite: remates baten récords en Agro en Punta',
+                'Veículo': 'Revista Globo Rural',
+                'Link': 'https://globorural.globo.com',
+                'Categoria': 'Agro en Punta'
+            },
+            {
+                'Título': 'Uruguay se consolida como hub del agronegocio regional',
+                'Veículo': 'Infobae',
+                'Link': 'https://www.infobae.com/america/agro/',
+                'Categoria': 'Agro en Punta'
+            },
+        ]
+    }
     
     # === OUTRAS NOTÍCIAS DO AGRONEGÓCIO ===
-    outras_noticias = [
-        {
-            'Título': 'Exportações agrícolas do Uruguai batem recorde em janeiro',
-            'Veículo': 'El Observador',
-            'Link': 'https://www.elobservador.com.uy/economia',
-            'Categoria': 'Mercado'
-        },
-        {
-            'Título': 'Preço da soja atinge máxima histórica nas bolsas internacionais',
-            'Veículo': 'Valor Econômico',
-            'Link': 'https://valor.globo.com/agronegocios',
-            'Categoria': 'Commodities'
-        },
-        {
-            'Título': 'Investimentos em irrigação crescem 40% na região do Mercosul',
-            'Veículo': 'Canal Rural',
-            'Link': 'https://www.canalrural.com.br',
-            'Categoria': 'Investimentos'
-        },
-        {
-            'Título': 'Pecuária uruguaia conquista novos mercados na Ásia',
-            'Veículo': 'La Nación Campo',
-            'Link': 'https://www.lanacion.com.ar/economia/campo',
-            'Categoria': 'Exportação'
-        },
-        {
-            'Título': 'Safra de trigo 2026 tem previsão recorde para Argentina e Brasil',
-            'Veículo': 'Agrolink',
-            'Link': 'https://www.agrolink.com.br',
-            'Categoria': 'Safra'
-        },
-        {
-            'Título': 'Dólar agro impulsiona exportações do agronegócio brasileiro',
-            'Veículo': 'Notícias Agrícolas',
-            'Link': 'https://www.noticiasagricolas.com.br',
-            'Categoria': 'Câmbio'
-        },
-        {
-            'Título': 'China aumenta importação de carne bovina do Mercosul em 25%',
-            'Veículo': 'Valor Econômico',
-            'Link': 'https://valor.globo.com/agronegocios',
-            'Categoria': 'Exportação'
-        },
-        {
-            'Título': 'Produtores do RS investem em agricultura regenerativa',
-            'Veículo': 'Canal Rural',
-            'Link': 'https://www.canalrural.com.br',
-            'Categoria': 'Sustentabilidade'
-        },
-    ]
+    outras_noticias = {
+        'pt-br': [
+            {
+                'Título': 'Exportações agrícolas do Uruguai batem recorde em janeiro',
+                'Veículo': 'El Observador',
+                'Link': 'https://www.elobservador.com.uy/economia',
+                'Categoria': 'Mercado'
+            },
+            {
+                'Título': 'Preço da soja atinge máxima histórica nas bolsas internacionais',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Commodities'
+            },
+            {
+                'Título': 'Investimentos em irrigação crescem 40% na região do Mercosul',
+                'Veículo': 'Canal Rural',
+                'Link': 'https://www.canalrural.com.br',
+                'Categoria': 'Investimentos'
+            },
+            {
+                'Título': 'Pecuária uruguaia conquista novos mercados na Ásia',
+                'Veículo': 'La Nación Campo',
+                'Link': 'https://www.lanacion.com.ar/economia/campo',
+                'Categoria': 'Exportação'
+            },
+            {
+                'Título': 'Safra de trigo 2026 tem previsão recorde para Argentina e Brasil',
+                'Veículo': 'Agrolink',
+                'Link': 'https://www.agrolink.com.br',
+                'Categoria': 'Safra'
+            },
+            {
+                'Título': 'China aumenta importação de carne bovina do Mercosul em 25%',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Exportação'
+            },
+        ],
+        'es-uy': [
+            {
+                'Título': 'Exportaciones agrícolas de Uruguay baten récord en enero',
+                'Veículo': 'El Observador',
+                'Link': 'https://www.elobservador.com.uy/economia',
+                'Categoria': 'Mercado'
+            },
+            {
+                'Título': 'Precio de la soja alcanza máximo histórico en bolsas internacionales',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Commodities'
+            },
+            {
+                'Título': 'Inversiones en irrigación crecen 40% en la región del Mercosur',
+                'Veículo': 'Canal Rural',
+                'Link': 'https://www.canalrural.com.br',
+                'Categoria': 'Inversiones'
+            },
+            {
+                'Título': 'Ganadería uruguaya conquista nuevos mercados en Asia',
+                'Veículo': 'La Nación Campo',
+                'Link': 'https://www.lanacion.com.ar/economia/campo',
+                'Categoria': 'Exportación'
+            },
+            {
+                'Título': 'Cosecha de trigo 2026 tiene previsión récord para Argentina y Brasil',
+                'Veículo': 'Agrolink',
+                'Link': 'https://www.agrolink.com.br',
+                'Categoria': 'Cosecha'
+            },
+            {
+                'Título': 'China aumenta importación de carne bovina del Mercosur en 25%',
+                'Veículo': 'Valor Econômico',
+                'Link': 'https://valor.globo.com/agronegocios',
+                'Categoria': 'Exportación'
+            },
+        ]
+    }
+    
+    # Seleciona idioma
+    agro_news = agro_en_punta_news.get(lang, agro_en_punta_news['pt-br'])
+    other_news = outras_noticias.get(lang, outras_noticias['pt-br'])
+    
+    # Texto de tempo por idioma
+    time_ago = 'Há' if lang == 'pt-br' else 'Hace'
+    time_min = 'min' if lang == 'pt-br' else 'min'
     
     now = datetime.now()
     all_news = []
     
     # Adiciona notícias do Agro en Punta
-    for i, news in enumerate(agro_en_punta_news):
+    for i, news in enumerate(agro_news):
         time_offset = timedelta(minutes=random.randint(10, 360))
-        news_time = now - time_offset
         all_news.append({
-            'Hora': f'Há {int(time_offset.total_seconds() // 60)} min',
+            'Hora': f'{time_ago} {int(time_offset.total_seconds() // 60)} {time_min}',
             'Veículo': news['Veículo'],
             'Título': news['Título'],
             'Link': news['Link'],
@@ -231,15 +446,14 @@ def _simulate_web_news():
         })
     
     # Adiciona outras notícias
-    for i, news in enumerate(outras_noticias):
+    for i, news in enumerate(other_news):
         time_offset = timedelta(minutes=random.randint(60, 720))
-        news_time = now - time_offset
         hours = int(time_offset.total_seconds() // 3600)
         mins = int((time_offset.total_seconds() % 3600) // 60)
         if hours > 0:
-            time_str = f'Há {hours}h {mins}min'
+            time_str = f'{time_ago} {hours}h {mins}{time_min}'
         else:
-            time_str = f'Há {mins} min'
+            time_str = f'{time_ago} {mins} {time_min}'
         all_news.append({
             'Hora': time_str,
             'Veículo': news['Veículo'],
@@ -251,10 +465,13 @@ def _simulate_web_news():
     return pd.DataFrame(all_news)
 
 
-def simulate_radio_listening():
+def simulate_radio_listening(lang='pt-br'):
     """
     Simula monitoramento de rádio com transcrições de emissoras do target.
     Retorna DataFrame com: Timestamp, Emissora, Transcrição, Sentimento
+    
+    Args:
+        lang: Idioma das transcrições ('pt-br' ou 'es-uy')
     """
     emissoras = [
         'Rádio Rural (UY)',
@@ -263,35 +480,78 @@ def simulate_radio_listening():
         'Jovem Pan Agro'
     ]
     
-    # Transcrições simuladas por categoria de sentimento
-    transcricoes_positivas = [
-        '...o evento em Punta está movimentando o PIB da região...',
-        '...excelente participação de produtores nesta edição...',
-        '...expectativa de recordes de exportação para este ano...',
-        '...o Ministro da Agricultura acaba de chegar sob aplausos...',
-        '...inovações tecnológicas impressionam visitantes...',
-        '...acordo comercial pode beneficiar milhares de produtores...',
-        '...safra recorde anima o setor agropecuário...',
-    ]
+    # Transcrições por idioma e sentimento
+    transcricoes = {
+        'pt-br': {
+            'positivas': [
+                '...o evento Agro en Punta está movimentando o PIB da região...',
+                '...excelente participação de produtores nesta edição do Agro en Punta...',
+                '...expectativa de recordes de exportação para este ano...',
+                '...o Ministro da Agricultura acaba de chegar em Punta del Este sob aplausos...',
+                '...inovações tecnológicas impressionam visitantes no pavilhão principal...',
+                '...acordo comercial Brasil-Uruguai pode beneficiar milhares de produtores...',
+                '...safra recorde anima o setor agropecuário no Mercosul...',
+                '...organizadores comemoram recorde de público no Agro en Punta 2026...',
+                '...presidente da Expointer confirma parceria histórica com Agro en Punta...',
+                '...tecnologia de pecuária de precisão ganha destaque no evento...',
+            ],
+            'neutras': [
+                '...atenção para o trânsito chegando no centro de convenções em Punta...',
+                '...a programação de hoje inclui palestras sobre sustentabilidade agropecuária...',
+                '...previsão do tempo indica céu aberto para os próximos dias em Punta del Este...',
+                '...credenciamento de imprensa segue até às dezoito horas...',
+                '...próximo painel discutirá política agrícola regional entre Brasil e Uruguai...',
+                '...representantes de doze países confirmaram presença no Agro en Punta...',
+                '...stand do Brasil apresenta novidades em agricultura regenerativa...',
+                '...cotação do boi gordo se mantém estável nesta semana...',
+            ],
+            'negativas': [
+                '...produtores reclamam da burocracia para exportação no Mercosul...',
+                '...atraso na liberação de crédito rural preocupa agricultores...',
+                '...preços dos insumos seguem pressionando margens dos produtores...',
+                '...seca em algumas regiões do Sul causa perdas significativas...',
+                '...protestos de caminhoneiros afetam logística do evento...',
+                '...tensão comercial pode impactar mercado de grãos na região...',
+                '...críticas à infraestrutura viária marcam primeiro dia do evento...',
+            ]
+        },
+        'es-uy': {
+            'positivas': [
+                '...el evento Agro en Punta está moviendo el PIB de la región...',
+                '...excelente participación de productores en esta edición de Agro en Punta...',
+                '...expectativa de récords de exportación para este año...',
+                '...el Ministro de Agricultura acaba de llegar a Punta del Este bajo aplausos...',
+                '...innovaciones tecnológicas impresionan a los visitantes en el pabellón principal...',
+                '...acuerdo comercial Uruguay-Brasil puede beneficiar a miles de productores...',
+                '...cosecha récord anima al sector agropecuario en el Mercosur...',
+                '...organizadores celebran récord de público en Agro en Punta 2026...',
+                '...presidente de la Expo Prado confirma alianza histórica con Agro en Punta...',
+                '...tecnología de ganadería de precisión gana destaque en el evento...',
+            ],
+            'neutras': [
+                '...atención al tránsito llegando al centro de convenciones en Punta...',
+                '...la programación de hoy incluye charlas sobre sustentabilidad agropecuaria...',
+                '...pronóstico del tiempo indica cielo despejado para los próximos días en Punta del Este...',
+                '...acreditación de prensa continúa hasta las dieciocho horas...',
+                '...próximo panel discutirá política agrícola regional entre Uruguay y Brasil...',
+                '...representantes de doce países confirmaron presencia en Agro en Punta...',
+                '...stand de Uruguay presenta novedades en agricultura regenerativa...',
+                '...cotización del ganado se mantiene estable esta semana...',
+            ],
+            'negativas': [
+                '...productores reclaman por la burocracia para exportación en el Mercosur...',
+                '...atraso en la liberación de crédito rural preocupa a los agricultores...',
+                '...precios de los insumos siguen presionando márgenes de los productores...',
+                '...sequía en algunas regiones del sur causa pérdidas significativas...',
+                '...protestas de camioneros afectan logística del evento...',
+                '...tensión comercial puede impactar mercado de granos en la región...',
+                '...críticas a la infraestructura vial marcan primer día del evento...',
+            ]
+        }
+    }
     
-    transcricoes_neutras = [
-        '...atenção para o trânsito chegando no centro de convenções...',
-        '...a programação de hoje inclui palestras sobre sustentabilidade...',
-        '...previsão do tempo indica céu aberto para os próximos dias...',
-        '...credenciamento segue até às dezoito horas...',
-        '...próximo painel discutirá política agrícola regional...',
-        '...representantes de doze países confirmaram presença...',
-    ]
-    
-    transcricoes_negativas = [
-        '...produtores reclamam da burocracia para exportação...',
-        '...atraso na liberação de crédito preocupa agricultores...',
-        '...preços dos insumos seguem pressionando margens...',
-        '...seca em algumas regiões causa perdas significativas...',
-        '...protestos de caminhoneiros afetam logística do evento...',
-        '...tensão comercial pode impactar mercado de grãos...',
-        '...críticas à infraestrutura do local marcam abertura...',
-    ]
+    # Seleciona o conjunto de transcrições baseado no idioma
+    trans = transcricoes.get(lang, transcricoes['pt-br'])
     
     registros = []
     now = datetime.now()
@@ -305,13 +565,13 @@ def simulate_radio_listening():
         sentimento_roll = random.random()
         if sentimento_roll < 0.40:
             sentimento = 'Positivo'
-            transcricao = random.choice(transcricoes_positivas)
+            transcricao = random.choice(trans['positivas'])
         elif sentimento_roll < 0.75:
             sentimento = 'Neutro'
-            transcricao = random.choice(transcricoes_neutras)
+            transcricao = random.choice(trans['neutras'])
         else:
             sentimento = 'Negativo'
-            transcricao = random.choice(transcricoes_negativas)
+            transcricao = random.choice(trans['negativas'])
         
         registros.append({
             'Timestamp': timestamp.strftime('%H:%M:%S'),
