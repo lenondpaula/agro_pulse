@@ -28,7 +28,8 @@ st.set_page_config(
     page_title="AgroPulse Media Watch",
     page_icon="📡",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="collapsed",
+    menu_items=None
 )
 
 # ============================================
@@ -141,35 +142,21 @@ if 'theme' not in st.session_state:
     st.session_state.theme = 'dark'
 
 # ============================================
-# SIDEBAR - CONFIGURAÇÕES
+# FUNÇÕES DE CALLBACK PARA TOGGLES
 # ============================================
-with st.sidebar:
-    st.markdown("### ⚙️ Configurações")
-    st.markdown("---")
-    
-    # Seletor de idioma
-    lang_options = {'🇧🇷 Português (BR)': 'pt-br', '🇺🇾 Español (UY)': 'es-uy'}
-    current_lang_label = '🇧🇷 Português (BR)' if st.session_state.language == 'pt-br' else '🇺🇾 Español (UY)'
-    
-    selected_lang = st.selectbox(
-        "🌐 Idioma / Idioma",
-        options=list(lang_options.keys()),
-        index=list(lang_options.values()).index(st.session_state.language)
-    )
-    st.session_state.language = lang_options[selected_lang]
-    
-    st.markdown("---")
-    
-    # Seletor de tema
-    theme_options = {THEMES[k]['name']: k for k in THEMES.keys()}
-    current_theme_name = THEMES[st.session_state.theme]['name']
-    
-    selected_theme = st.selectbox(
-        "🎨 Tema Visual",
-        options=list(theme_options.keys()),
-        index=list(theme_options.values()).index(st.session_state.theme)
-    )
-    st.session_state.theme = theme_options[selected_theme]
+def toggle_language():
+    """Alterna entre PT-BR e ES-UY."""
+    if st.session_state.language == 'pt-br':
+        st.session_state.language = 'es-uy'
+    else:
+        st.session_state.language = 'pt-br'
+
+def cycle_theme():
+    """Cicla entre os temas: dark → grey → white → dark."""
+    theme_order = ['dark', 'grey', 'white']
+    current_idx = theme_order.index(st.session_state.theme)
+    next_idx = (current_idx + 1) % len(theme_order)
+    st.session_state.theme = theme_order[next_idx]
 
 # Obtém textos e tema atual
 t = TRANSLATIONS[st.session_state.language]
@@ -188,6 +175,19 @@ st.markdown(f"""
     .block-container {{
         padding-top: 3.5rem !important;
         padding-bottom: 1rem !important;
+    }}
+    
+    /* Esconde sidebar completamente */
+    [data-testid="stSidebar"] {{
+        display: none !important;
+    }}
+    
+    [data-testid="stSidebarCollapsedControl"] {{
+        display: none !important;
+    }}
+    
+    button[kind="header"] {{
+        display: none !important;
     }}
     
     /* Header do Streamlit - ajusta altura para não sobrepor */
@@ -414,6 +414,82 @@ st.markdown(f"""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# ============================================
+# BARRA DE CONTROLES NO TOPO (UX: Toggle Switches)
+# ============================================
+# Labels dinâmicos baseados no estado atual
+lang_label = "🇧🇷 PT" if st.session_state.language == 'pt-br' else "🇺🇾 ES"
+theme_icon = {'dark': '🌙', 'grey': '🌫️', 'white': '☀️'}[st.session_state.theme]
+theme_label = theme_icon
+
+# Container com CSS para alinhar à direita
+st.markdown(f"""
+<style>
+    .top-controls {{
+        display: flex;
+        justify-content: flex-end;
+        align-items: center;
+        gap: 8px;
+        padding: 0 0 15px 0;
+        margin-top: -10px;
+    }}
+    .control-btn {{
+        background: {theme['bg_secondary']};
+        border: 1px solid {theme['border']};
+        border-radius: 20px;
+        padding: 6px 14px;
+        color: {theme['text_primary']};
+        font-size: 0.85rem;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+    }}
+    .control-btn:hover {{
+        background: {theme['accent']};
+        color: {theme['bg_primary']};
+        transform: scale(1.05);
+    }}
+    /* Esconde labels dos botões Streamlit */
+    .stButton > button {{
+        background: {theme['bg_secondary']} !important;
+        border: 1px solid {theme['border']} !important;
+        border-radius: 20px !important;
+        color: {theme['text_primary']} !important;
+        font-weight: 500 !important;
+        padding: 0.4rem 1rem !important;
+        transition: all 0.2s ease !important;
+    }}
+    .stButton > button:hover {{
+        background: {theme['accent']} !important;
+        color: {theme['bg_primary']} !important;
+        border-color: {theme['accent']} !important;
+    }}
+    .stButton > button:focus {{
+        box-shadow: none !important;
+    }}
+    div[data-testid="stHorizontalBlock"] > div:last-child {{
+        display: flex;
+        justify-content: flex-end;
+    }}
+</style>
+""", unsafe_allow_html=True)
+
+# Botões de controle alinhados à direita
+col_spacer, col_lang, col_theme = st.columns([8, 1, 1])
+
+with col_lang:
+    if st.button(lang_label, key="lang_toggle", help="Alternar idioma / Cambiar idioma", use_container_width=True):
+        toggle_language()
+        st.rerun()
+
+with col_theme:
+    if st.button(theme_label, key="theme_toggle", help="Alternar tema / Cambiar tema", use_container_width=True):
+        cycle_theme()
+        st.rerun()
 
 # ============================================
 # TÍTULO
