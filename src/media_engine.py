@@ -7,6 +7,9 @@ import pandas as pd
 from datetime import datetime, timedelta
 from faker import Faker
 import random
+import json
+from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
 
 # Inicializa Faker com locale português
 fake = Faker('pt_BR')
@@ -55,15 +58,119 @@ def get_web_news(lang='pt-br'):
                     'Link': formatted_link
                 })
         
-        if not all_news:
+        gdelt_news = get_gdelt_news(lang)
+        df_gn = pd.DataFrame(all_news)
+        combined = pd.concat([df_gn, gdelt_news], ignore_index=True)
+        if combined.empty:
             # Fallback com dados simulados se não houver resultados
             return _simulate_web_news(lang)
-            
-        return pd.DataFrame(all_news)
+
+        return combined
     
     except Exception as e:
         print(f"Erro ao buscar notícias: {e}. Usando dados simulados.")
         return _simulate_web_news(lang)
+
+
+def _format_gdelt_time(seendate_str, lang='pt-br'):
+    """
+    Converte data GDELT (YYYYMMDDHHmmss) para formato relativo (Há X dias).
+    """
+    if not seendate_str or len(seendate_str) < 12:
+        return 'Agora'
+    
+    try:
+        seen_dt = datetime.strptime(seendate_str, '%Y%m%d%H%M%S')
+        now = datetime.now()
+        delta = now - seen_dt
+        
+        if delta.days > 0:
+            if lang == 'es-uy':
+                return f"Hace {delta.days} {'día' if delta.days == 1 else 'días'}"
+            else:
+                return f"Há {delta.days} {'dia' if delta.days == 1 else 'dias'}"
+        elif delta.seconds >= 3600:
+            hours = delta.seconds // 3600
+            if lang == 'es-uy':
+                return f"Hace {hours} {'hora' if hours == 1 else 'horas'}"
+            else:
+                return f"Há {hours} {'hora' if hours == 1 else 'horas'}"
+        elif delta.seconds >= 60:
+            mins = delta.seconds // 60
+            if lang == 'es-uy':
+                return f"Hace {mins} min"
+            else:
+                return f"Há {mins} min"
+        else:
+            return 'Agora' if lang == 'pt-br' else 'Ahora'
+    except ValueError:
+        return 'Agora' if lang == 'pt-br' else 'Ahora'
+
+
+def _extract_veicle_from_url(url_str):
+    """
+    Extrai o nome do veículo/domínio da URL.
+    """
+    if not url_str:
+        return 'Fonte GDELT'
+    
+    # Remove https:// e http://
+    url_str = url_str.replace('https://', '').replace('http://', '')
+    
+    # Pega o domínio principal
+    domain = url_str.split('/')[0].replace('www.', '')
+    
+    # Tira a extensão (.com, .com.br, etc)
+    domain_parts = domain.split('.')
+    if len(domain_parts) > 1:
+        # Mantém o nome principal (ex: 'agrolink' em 'agrolink.com.br')
+        veicle_name = domain_parts[0].capitalize()
+        return veicle_name
+    
+    return 'Fonte GDELT'
+
+
+def get_gdelt_news(lang='pt-br'):
+    """
+    Busca notícias via GDELT 2.1 Document API.
+    Retorna DataFrame com: Hora, Veículo, Título, Link
+    """
+    search_terms = ['Agro en Punta', 'Agronegócio Uruguai', 'Expoagro', 'Agricultura Mercosul']
+    source_lang = 'sourcelang:spa' if lang == 'es-uy' else 'sourcelang:por'
+    all_news = []
+
+    for term in search_terms:
+        query = f'"{term}" {source_lang}'
+        url = (
+            'https://api.gdeltproject.org/api/v2/doc/doc?'
+            f'query={quote_plus(query)}&mode=ArtList&maxrecords=20&format=json'
+        )
+
+        try:
+            request = Request(url, headers={'User-Agent': 'AgroPulse/1.0'})
+            with urlopen(request, timeout=10) as response:
+                data = json.loads(response.read().decode('utf-8'))
+
+            for item in data.get('articles', []):
+                seendate = item.get('seendate', '')
+                hora = _format_gdelt_time(seendate, lang)
+                
+                # Tenta usar sourceCommonName, se não existir extrai da URL
+                article_url = item.get('url', '')
+                veicle = item.get('sourceCommonName', None)
+                if not veicle or veicle == 'Unknown':
+                    veicle = _extract_veicle_from_url(article_url)
+
+                all_news.append({
+                    'Hora': hora,
+                    'Veículo': veicle,
+                    'Título': item.get('title', 'Sem título'),
+                    'Link': article_url
+                })
+        except Exception:
+            continue
+
+    return pd.DataFrame(all_news)
 
 
 def _format_news_date(raw_date, lang='pt-br'):
@@ -129,6 +236,8 @@ def _format_news_link(raw_link):
         return f'https://{raw_link}'
     
     return '#'
+
+
 
 
 def _simulate_web_news(lang='pt-br'):

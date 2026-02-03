@@ -7,7 +7,8 @@ Design: High Contrast Dark Mode / Grey / White
 import streamlit as st
 import pandas as pd
 import altair as alt
-from datetime import datetime
+from datetime import datetime, timedelta
+import re
 import sys
 import os
 
@@ -386,7 +387,13 @@ st.markdown(f"""
 @st.cache_data(ttl=300)  # Cache de 5 minutos
 def load_data(lang='pt-br'):
     """Carrega todos os dados das fontes baseado no idioma selecionado."""
-    web_news = get_web_news(lang)
+    web_news_pt = get_web_news('pt-br')
+    web_news_es = get_web_news('es-uy')
+    web_news = pd.concat([web_news_pt, web_news_es], ignore_index=True)
+    if not web_news.empty:
+        dedupe_cols = [col for col in ['Título', 'Veículo', 'Link'] if col in web_news.columns]
+        if dedupe_cols:
+            web_news = web_news.drop_duplicates(subset=dedupe_cols)
     radio_data = simulate_radio_listening(lang)
     social_buzz = simulate_social_buzz()
     sentiment = get_sentiment_summary(radio_data)
@@ -653,6 +660,53 @@ with col_web:
         else:
             return title
     
+    def parse_news_time(value):
+        """Converte strings de tempo (PT/ES) para datetime para ordenação."""
+        if not value or not isinstance(value, str):
+            return None
+
+        text = value.strip()
+        now = datetime.now()
+        lower = text.lower()
+
+        # Formato HH:MM
+        if re.match(r'^\d{1,2}:\d{2}$', text):
+            try:
+                parsed_time = datetime.strptime(text, '%H:%M').time()
+                return datetime.combine(now.date(), parsed_time)
+            except ValueError:
+                return None
+
+        # Formato ISO yyyy-mm-dd HH:MM
+        try:
+            return datetime.strptime(text, '%Y-%m-%d %H:%M')
+        except ValueError:
+            pass
+
+        # Relativo PT/ES: "Há 2 h", "Hace 10 min"
+        match = re.search(r'(há|ha|hace)\s*(\d+)\s*(min|minutos|m|hora|horas|h|dia|dias|día|días|d)\b', lower)
+        if match:
+            amount = int(match.group(2))
+            unit = match.group(3)
+            if unit in ['min', 'minutos', 'm']:
+                return now - timedelta(minutes=amount)
+            if unit in ['hora', 'horas', 'h']:
+                return now - timedelta(hours=amount)
+            if unit in ['dia', 'dias', 'día', 'días', 'd']:
+                return now - timedelta(days=amount)
+
+        return None
+
+    def prepare_news_df(df):
+        """Adiciona coluna de ordenação baseada em tempo (mais recente primeiro)."""
+        if df.empty:
+            return df
+        df = df.copy()
+        df['_parsed_ts'] = df['Hora'].apply(parse_news_time)
+        df['_parsed_ts'] = df['_parsed_ts'].fillna(datetime.now())
+        df = df.sort_values('_parsed_ts', ascending=False)
+        return df
+
     # Formata DataFrame para exibição
     if not web_news_df.empty:
         # Verifica se tem coluna Categoria (dados simulados) ou não (GoogleNews)
@@ -671,14 +725,20 @@ with col_web:
         # Aba 1: Agro en Punta
         with tab1:
             if not df_agro_punta.empty:
-                display_df = df_agro_punta.copy()
-                display_df['Título'] = display_df.apply(make_link, axis=1)
-                display_df = display_df[['Hora', 'Veículo', 'Título']]
-                display_df.columns = [t['hour'], t['vehicle'], t['title_col']]
-                st.markdown(
-                    display_df.to_html(escape=False, index=False, classes='news-table'),
-                    unsafe_allow_html=True
-                )
+                display_df = prepare_news_df(df_agro_punta)
+                cutoff_date = datetime.now() - timedelta(weeks=4)
+                display_df = display_df[display_df['_parsed_ts'] >= cutoff_date]
+                if not display_df.empty:
+                    display_df['Título'] = display_df.apply(make_link, axis=1)
+                    display_df = display_df[['Hora', 'Veículo', 'Título']]
+                    display_df.columns = [t['hour'], t['vehicle'], t['title_col']]
+                    st.markdown(
+                        display_df.to_html(escape=False, index=False, classes='news-table'),
+                        unsafe_allow_html=True
+                    )
+                else:
+                    no_news_agro = "Nenhuma notícia sobre Agro en Punta nas últimas 4 semanas." if st.session_state.language == 'pt-br' else "No hay noticias sobre Agro en Punta en las últimas 4 semanas."
+                    st.info(no_news_agro)
             else:
                 no_news_agro = "Nenhuma notícia sobre Agro en Punta no momento." if st.session_state.language == 'pt-br' else "No hay noticias sobre Agro en Punta en este momento."
                 st.info(no_news_agro)
@@ -686,7 +746,7 @@ with col_web:
         # Aba 2: Outras Notícias
         with tab2:
             if not df_outros.empty:
-                display_df = df_outros.copy()
+                display_df = prepare_news_df(df_outros)
                 display_df['Título'] = display_df.apply(make_link, axis=1)
                 display_df = display_df[['Hora', 'Veículo', 'Título']]
                 display_df.columns = [t['hour'], t['vehicle'], t['title_col']]

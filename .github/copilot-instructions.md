@@ -1,129 +1,57 @@
 # AgroPulse Media Watch - Instruções para Agentes de IA
 
-## Visão Geral do Projeto
-
-**AgroPulse Media Watch** é uma aplicação de **Monitoramento de Mídia** (Clipagem e Rádio Escuta) focada no evento **Agro en Punta 2026** no Uruguai e Brasil. Desenvolvida com Streamlit, oferece tema **High Contrast Dark Mode** para leitura rápida.
+## Visão Geral
+Aplicação Streamlit para monitoramento de mídia focada no evento **Agro en Punta 2026** (Uruguai/Brasil). Usa GoogleNews para dados reais e Faker para simulação.
 
 ## Stack Tecnológica
-
 - **Framework**: Streamlit (Python 3.10+)
-- **Dados**: Pandas, GoogleNews (notícias reais), Faker (simulação)
-- **Visualização**: Altair (gráficos de barras empilhadas)
+- **Dados**: Pandas, GoogleNews, Faker
+- **Visualização**: Altair (gráficos empilhados)
 - **Temas**: Dark (#0E1117), Grey (#2D3748), White (#FFFFFF)
-- **Internacionalização**: PT-BR e ES-UY
 
 ## Estrutura do Projeto
-
 ```
-agro_pulse/
-├── app/
-│   └── main.py              # Dashboard principal Streamlit
-├── src/
-│   └── media_engine.py      # Motor de coleta e simulação de dados
-├── .streamlit/
-│   └── config.toml          # Configuração do tema e servidor
-├── .github/
-│   ├── copilot-instructions.md
-│   └── workflows/
-│       └── keep-alive.yml   # GitHub Action para evitar sleep mode
-├── requirements.txt         # Dependências Python
-└── README.md
+├── app/main.py          # Dashboard principal
+├── src/media_engine.py  # Motor de dados (notícias, rádio, social)
+├── .streamlit/config.toml # Tema e servidor
+├── requirements.txt     # Dependências
 ```
 
-## Comandos de Desenvolvimento
-
+## Comandos Essenciais
 ```bash
-# Instalar dependências
 pip install -r requirements.txt
-
-# Executar aplicação principal
-streamlit run app/main.py
-
-# Porta padrão: 8501
+streamlit run app/main.py  # Porta 8501
 ```
 
-## Arquitetura da Aplicação
-
-### Módulo `src/media_engine.py`
-
-| Função | Descrição |
-|--------|-----------|
-| `get_web_news()` | Busca notícias via GoogleNews, com fallback para dados simulados |
-| `_format_news_date()` | Corrige formatação de datas ("á" → "Há") |
-| `_format_news_link()` | Processa links relativos do GoogleNews |
-| `_simulate_web_news()` | Gera notícias simuladas divididas por categoria |
-| `simulate_radio_listening()` | Gera 20 transcrições de rádio com sentimento |
-| `simulate_social_buzz()` | Gera dados de 6 redes sociais por hora |
-| `get_sentiment_summary()` | Retorna contagem de sentimentos |
-
-### Módulo `app/main.py`
-
-| Componente | Descrição |
-|------------|-----------|
-| **Ticker Superior** | Última menção em rádio com animação CSS |
-| **KPIs** | Web News (24h), Citações em Rádio, Sentimento Global |
-| **Feed de Rádio** | Timeline com cards coloridos por sentimento |
-| **Gráfico Social** | Barras empilhadas por hora (6 redes) |
-| **Tabela de Notícias** | 2 abas: "Agro en Punta" e "Outras Notícias" |
-| **Footer** | Informações profissionais do autor |
+## Arquitetura
+- **main.py**: UI com KPIs, feed de rádio, gráfico social, tabela de notícias em abas
+- **media_engine.py**: Funções `get_web_news()`, `simulate_radio_listening()`, `simulate_social_buzz()`, `get_sentiment_summary()`
+- Dados simulados priorizam "Agro en Punta"; fallback para GoogleNews
 
 ## Convenções de Código
+- **Nomes**: Inglês (snake_case para funções)
+- **Docstrings**: Português simples
+- **UI Strings**: Dict `TRANSLATIONS` (PT-BR/ES-UY)
+- **Temas**: Dict `THEMES` com cores hex
+- **Imports**: `sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))` para src/
 
-### Idioma
-- **Código**: Nomes em inglês (variáveis, funções)
-- **Strings de UI**: Português brasileiro ou Espanhol (via TRANSLATIONS)
-- **Commits**: Português brasileiro, formato semântico
-
-### Estilo Python
-- Funções: `snake_case` (ex: `simulate_radio_listening`)
-- Docstrings: Português brasileiro, formato simples
-- Type hints quando útil para clareza
-
-### Padrão de Cores (Tema Dark)
-```python
-COLORS = {
-    'bg_primary': '#0E1117',
-    'bg_secondary': '#1A1F2E',
-    'accent': '#00FF88',
-    'text_primary': '#FAFAFA',
-    'text_secondary': '#A0AEC0',
-    'negative': '#FF4444'
-}
-```
+## Padrões de UI
+- `st.markdown(unsafe_allow_html=True)` para cards customizados
+- Emojis: 🎙️ Rádio, 🌐 Web, 📊 Social
+- Sentimento: 🟢 Positivo, ⚪ Neutro, 🔴 Negativo
+- `st.tabs()` para organizar conteúdo; `st.columns()` para responsivo
 
 ## Fontes de Dados
-
-### Emissoras de Rádio Monitoradas
-- 🇺🇾 Rádio Rural (UY), Carve 850 AM
-- 🇧🇷 Rádio Gaúcha (BR), Jovem Pan Agro
-
-### Veículos de Imprensa
-- El País Uruguay, El Observador, La Nación Campo
-- Canal Rural, Agrolink, Notícias Agrícolas, Valor Econômico
-
-### Redes Sociais
-- X (ex-Twitter), Instagram, Facebook, Threads, LinkedIn, TikTok
+- **Rádio**: Rádio Rural (UY), Rádio Gaúcha (BR)
+- **Imprensa**: El País, Canal Rural, etc.
+- **Social**: X, Instagram, Facebook, Threads, LinkedIn, TikTok
 
 ## Notas para Agentes de IA
+- Mantenha compatibilidade com 3 temas
+- Use Altair para gráficos consistentes
+- Adicione traduções em `TRANSLATIONS`
+- Priorize "Agro en Punta" em dados simulados
+- Teste com `streamlit run` após mudanças
 
-### Ao adicionar features
-1. Mantenha compatibilidade com os 3 temas (dark, grey, white)
-2. Use Altair para gráficos (consistência visual)
-3. Adicione traduções em `TRANSLATIONS` para PT-BR e ES-UY
-4. Dados simulados via Faker, dados reais via GoogleNews
-5. Priorize layout responsivo com `st.columns()`
-
-### Padrões de UI
-- Use `st.markdown()` com `unsafe_allow_html=True` para cards customizados
-- Emojis para identificação rápida (🎙️ Rádio, 🌐 Web, 📊 Social)
-- Sentimento: 🟢 Positivo, ⚪ Neutro, 🔴 Negativo
-- Abas (`st.tabs()`) para organizar conteúdo
-
-### Foco Principal
-O tema central é o **Agro en Punta 2026** — evento agropecuário em Punta del Este reunindo Brasil e Uruguai. Notícias sobre este tema devem ser priorizadas.
-
----
-
-**Última atualização**: 2026-02-02  
-**Status**: MVP funcional  
+**Última atualização**: 2026-02-03  
 **Deploy**: https://agropulse.streamlit.app
