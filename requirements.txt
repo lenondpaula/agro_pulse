@@ -18,3 +18,7 @@ faker>=22.0.0
 
 # Utilitários (datetime é built-in, mas incluímos python-dateutil para parsing avançado)
 python-dateutil>=2.8.0
+
+# Keep-Alive: Manter Streamlit Cloud ativo com Selenium
+selenium>=4.14.0
+webdriver-manager>=4.0.0
