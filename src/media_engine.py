@@ -8,11 +8,124 @@ from datetime import datetime, timedelta
 from faker import Faker
 import random
 import json
+import os
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
 
 # Inicializa Faker com locale português
 fake = Faker('pt_BR')
+
+# Caminho para cache de notícias
+NEWS_CACHE_FILE = os.path.join(os.path.dirname(__file__), '..', 'data', 'news_cache.json')
+
+def _ensure_cache_dir():
+    """Garante que o diretório de cache existe."""
+    cache_dir = os.path.dirname(NEWS_CACHE_FILE)
+    if not os.path.exists(cache_dir):
+        os.makedirs(cache_dir, exist_ok=True)
+
+
+def save_news_to_cache(news_df):
+    """
+    Salva notícias em cache JSON para persistência.
+    Mantém histórico de 3 meses para Agro en Punta e 1 mês para outros.
+    """
+    if news_df.empty:
+        return
+    
+    _ensure_cache_dir()
+    
+    # Carrega cache existente
+    existing_cache = {}
+    if os.path.exists(NEWS_CACHE_FILE):
+        try:
+            with open(NEWS_CACHE_FILE, 'r', encoding='utf-8') as f:
+                existing_cache = json.load(f)
+        except Exception:
+            existing_cache = {}
+    
+    # Converte DataFrame para dict
+    news_dict = news_df.to_dict('records')
+    
+    # Adiciona timestamp de armazenamento se não tiver
+    now = datetime.now().isoformat()
+    for item in news_dict:
+        if '_cached_at' not in item:
+            item['_cached_at'] = now
+        if 'Categoria' not in item:
+            # Detecta categoria automaticamente
+            titulo = str(item.get('Título', '')).lower()
+            item['Categoria'] = 'Agro en Punta' if 'agro en punta' in titulo else 'Outros'
+    
+    # Mescla com cache existente (evitando duplicatas por link)
+    cached_links = {item.get('Link', ''): item for item in existing_cache.get('news', [])}
+    for item in news_dict:
+        link = item.get('Link', '')
+        if link and link != '#':
+            cached_links[link] = item
+    
+    # Salva cache atualizado
+    try:
+        with open(NEWS_CACHE_FILE, 'w', encoding='utf-8') as f:
+            json.dump({'news': list(cached_links.values())}, f, ensure_ascii=False, indent=2)
+    except Exception as e:
+        print(f"Erro ao salvar cache: {e}")
+
+
+def load_cached_news(include_all=False):
+    """
+    Carrega notícias do cache com filtros de período.
+    
+    Args:
+        include_all: Se True, retorna todas as notícias. Se False, aplica filtros.
+    
+    Retorna:
+        DataFrame com notícias do cache filtradas por período.
+    """
+    if not os.path.exists(NEWS_CACHE_FILE):
+        return pd.DataFrame()
+    
+    try:
+        with open(NEWS_CACHE_FILE, 'r', encoding='utf-8') as f:
+            cache_data = json.load(f)
+        
+        news_list = cache_data.get('news', [])
+        if not news_list:
+            return pd.DataFrame()
+        
+        df = pd.DataFrame(news_list)
+        
+        if include_all:
+            return df
+        
+        # Filtra por período baseado na categoria
+        now = datetime.now()
+        filtered = []
+        
+        for _, row in df.iterrows():
+            categoria = row.get('Categoria', 'Outros')
+            cached_at = row.get('_cached_at')
+            
+            if cached_at:
+                try:
+                    cached_dt = datetime.fromisoformat(cached_at)
+                except ValueError:
+                    cached_dt = now
+            else:
+                cached_dt = now
+            
+            idade_dias = (now - cached_dt).days
+            
+            if categoria == 'Agro en Punta' and idade_dias <= 90:  # 3 meses
+                filtered.append(row)
+            elif categoria != 'Agro en Punta' and idade_dias <= 30:  # 1 mês
+                filtered.append(row)
+        
+        return pd.DataFrame(filtered) if filtered else pd.DataFrame()
+    
+    except Exception as e:
+        print(f"Erro ao carregar cache: {e}")
+        return pd.DataFrame()
 
 
 def get_web_news(lang='pt-br'):
@@ -63,13 +176,22 @@ def get_web_news(lang='pt-br'):
         combined = pd.concat([df_gn, gdelt_news], ignore_index=True)
         if combined.empty:
             # Fallback com dados simulados se não houver resultados
-            return _simulate_web_news(lang)
-
+            combined = _simulate_web_news(lang)
+        
+        # Salva notícias no cache
+        save_news_to_cache(combined)
+        
+        # Carrega cache completo (com histórico)
+        cached = load_cached_news(include_all=False)
+        if not cached.empty:
+            return cached
         return combined
     
     except Exception as e:
         print(f"Erro ao buscar notícias: {e}. Usando dados simulados.")
-        return _simulate_web_news(lang)
+        result = _simulate_web_news(lang)
+        save_news_to_cache(result)
+        return result
 
 
 def _format_gdelt_time(seendate_str, lang='pt-br'):

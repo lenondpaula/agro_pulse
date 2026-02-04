@@ -384,7 +384,7 @@ st.markdown(f"""
 # ============================================
 # CARREGA DADOS
 # ============================================
-@st.cache_data(ttl=300)  # Cache de 5 minutos
+@st.cache_data(ttl=600)  # Cache de 10 minutos para respeitar janela de 10 dias
 def load_data(lang='pt-br'):
     """Carrega todos os dados das fontes baseado no idioma selecionado."""
     web_news_pt = get_web_news('pt-br')
@@ -722,11 +722,11 @@ with col_web:
             df_agro_punta = web_news_df[mask_agro].copy()
             df_outros = web_news_df[~mask_agro].copy()
         
-        # Aba 1: Agro en Punta
+        # Aba 1: Agro en Punta (até 3 meses, visível por 10 dias)
         with tab1:
             if not df_agro_punta.empty:
                 display_df = prepare_news_df(df_agro_punta)
-                cutoff_date = datetime.now() - timedelta(weeks=4)
+                cutoff_date = datetime.now() - timedelta(days=90)  # 3 meses
                 display_df = display_df[display_df['_parsed_ts'] >= cutoff_date]
                 if not display_df.empty:
                     display_df['Título'] = display_df.apply(make_link, axis=1)
@@ -737,23 +737,29 @@ with col_web:
                         unsafe_allow_html=True
                     )
                 else:
-                    no_news_agro = "Nenhuma notícia sobre Agro en Punta nas últimas 4 semanas." if st.session_state.language == 'pt-br' else "No hay noticias sobre Agro en Punta en las últimas 4 semanas."
+                    no_news_agro = "Nenhuma notícia sobre Agro en Punta nos últimos 3 meses." if st.session_state.language == 'pt-br' else "No hay noticias sobre Agro en Punta en los últimos 3 meses."
                     st.info(no_news_agro)
             else:
                 no_news_agro = "Nenhuma notícia sobre Agro en Punta no momento." if st.session_state.language == 'pt-br' else "No hay noticias sobre Agro en Punta en este momento."
                 st.info(no_news_agro)
         
-        # Aba 2: Outras Notícias
+        # Aba 2: Outras Notícias (até 1 mês)
         with tab2:
             if not df_outros.empty:
                 display_df = prepare_news_df(df_outros)
-                display_df['Título'] = display_df.apply(make_link, axis=1)
-                display_df = display_df[['Hora', 'Veículo', 'Título']]
-                display_df.columns = [t['hour'], t['vehicle'], t['title_col']]
-                st.markdown(
-                    display_df.to_html(escape=False, index=False, classes='news-table'),
-                    unsafe_allow_html=True
-                )
+                cutoff_date = datetime.now() - timedelta(days=30)  # 1 mês
+                display_df = display_df[display_df['_parsed_ts'] >= cutoff_date]
+                if not display_df.empty:
+                    display_df['Título'] = display_df.apply(make_link, axis=1)
+                    display_df = display_df[['Hora', 'Veículo', 'Título']]
+                    display_df.columns = [t['hour'], t['vehicle'], t['title_col']]
+                    st.markdown(
+                        display_df.to_html(escape=False, index=False, classes='news-table'),
+                        unsafe_allow_html=True
+                    )
+                else:
+                    no_news_other = "Nenhuma outra notícia no último mês." if st.session_state.language == 'pt-br' else "No hay otras noticias en el último mes."
+                    st.info(no_news_other)
             else:
                 no_news_other = "Nenhuma outra notícia no momento." if st.session_state.language == 'pt-br' else "No hay otras noticias en este momento."
                 st.info(no_news_other)
